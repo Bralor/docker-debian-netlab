@@ -1,0 +1,34 @@
+#!/bin/bash
+
+set -e
+
+USAGE="Usage (inside Bird's Git workdir): $0 commit conftemplate"
+SUBDIRECTORY_OK=true
+
+if [ -z "$1" ] || [ -z "$2" ] || [ ! -f "$2" ]; then
+  echo $USAGE
+  exit 2
+fi
+
+COMMIT=$(git rev-parse $1)
+
+echo COMMIT is $COMMIT
+
+. "$(git --exec-path)/git-sh-setup"
+cd_to_toplevel
+
+DIR=$(pwd)
+
+TMPDIR=$(mktemp -d)
+cp $2 $TMPDIR/$COMMIT-template.conf
+
+pushd $TMPDIR
+git init
+git add $COMMIT-template.conf
+git commit -m "Config template"
+git fetch -q $DIR
+git merge -m "automerge" -q $COMMIT
+git push -f root@10.0.0.11:/var/lib/virt/nfs/bird HEAD:tmp
+popd
+
+rm -rf $TMPDIR

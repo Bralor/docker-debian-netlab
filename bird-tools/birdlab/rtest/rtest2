@@ -1,0 +1,42 @@
+#!/bin/bash
+
+set -e
+
+usage() {
+  cat <<EOF
+Usage (inside Bird's Git workdir): $0 commit script
+EOF
+  exit 2
+}
+
+SUBDIRECTORY_OK=true
+
+if [ -z "$1" ] || [ -z "$2" ] || [ ! -f "$2" ] || [ ! -z "$3" ]; then
+  usage
+fi
+
+COMMIT=$(git rev-parse $1)
+
+echo COMMIT is $COMMIT
+
+. "$(git --exec-path)/git-sh-setup"
+cd_to_toplevel
+
+DIR=$(pwd)
+
+TMPDIR=$(mktemp -d)
+
+cp $2 $TMPDIR/$COMMIT-run
+chmod +x $TMPDIR/$COMMIT-run
+
+pushd $TMPDIR
+git init
+git add $COMMIT-run
+git commit -m "Config template"
+git fetch -q $DIR
+git merge -m "automerge" -q $COMMIT --allow-unrelated-histories
+
+git push -f root@172.20.20.180:/root/bird-auto-test HEAD:run
+popd
+
+rm -rf $TMPDIR

@@ -1,0 +1,44 @@
+#!/bin/bash
+
+set -e
+
+BASEDIR=$(readlink -f $(dirname $0))
+
+function LOG() {
+  echo $@ >&1
+}
+
+function ERR() {
+  echo $@ >&2
+}
+
+LOG logtest
+ERR errtest
+
+echo "karel"
+
+git log --format=oneline $@ | while read COMMIT TITLE; do
+  LOG "Test for $COMMIT $TITLE"
+  if [ -f Makefile ]; then
+    LOG "Distclean"
+    make distclean
+  fi
+
+  LOG "Git checkout $COMMIT"
+  git checkout $COMMIT || ( ERR "Checkout failed: $?" && continue )
+
+  LOG "Autoreconf"
+  autoreconf -i || ( ERR "Autoreconf failed: $?" && continue )
+
+  LOG "Configure"
+  ./configure || ( ERR "Configure failed: $?" && continue )
+
+  LOG "Make"
+  make -j || ( ERR "Make failed: $?" && continue )
+
+  LOG "Running perf test for $COMMIT"
+  ${BASEDIR}/perf-test-commit || ( ERR "Perf test failed: $?" && continue )
+
+  LOG "Perf test for $COMMIT successful"
+done
+

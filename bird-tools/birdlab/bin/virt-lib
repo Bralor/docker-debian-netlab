@@ -1,0 +1,304 @@
+#!/bin/bash
+#ROOT=$(readlink -f $(dirname $(readlink -f $0))/../)
+ROOT=/var/lib/virt
+
+VIRTBR=virtbr
+VIRTCTRL=virtctrl
+VIRTUPLINK=virtuplink
+VIRTUALS=$ROOT/etc/virtlist
+VIRTUSER=virt-qemu
+
+function E() {
+  $QUIET || echo "$@"
+}
+
+function virtns() {
+	"$@"
+}
+
+function vsctl() {
+	virtns ovs-vsctl "$@"
+}
+
+function mactotap() {
+	echo vl-$(tr -d ':' <<<"$1")
+}
+
+function wait_pidfiles() {
+  local -A PIDS
+  while [ -r $1 ]; do
+    ${PIDS[$(<$1)]}=1
+    shift
+  done
+  TIMEOUT=${1:-30}
+
+  while [ ! -z "${!PIDS[@]}" ]; do
+		E -n "."
+    for pid in "${!PIDS[@]}"; do
+      if [ ! -d /proc/$pid ]; then
+        unset PIDS[$pid]
+      fi
+    done
+  done
+}
+
+function wait_pidfile() {
+	CNT=0
+	FILE=$1
+	TIMEOUT=${2:-30}
+	while [ -d /proc/$(<$FILE) ]; do
+		E -n "."
+		sleep 1
+		CNT=$((CNT+1))
+		if [ $CNT -eq $TIMEOUT ]; then
+			E
+			E "Timeout ${TIMEOUT}s reached."
+			return 1
+		fi
+	done
+	return 0
+}
+
+SOCAT=$ROOT/bin/socat
+#SOCAT=$(which socat)
+
+declare -A HOSTS
+declare -A CONF
+
+function getmac() {
+	echo 52:54:$(sed -r 's/^.*(..)(..)(..)(..)$/\1:\2:\3:\4/'<<<"$1")
+}
+
+function hostctlnet() {
+	if [ -z "${CONF[$1;NETWORK]}" ]; then
+		local SHA=$(sha1sum <<<"$1" | head -c 12)
+		CONF[$1;MAC]=$(getmac $SHA)
+    CONF[$1;TAP]=$(mactotap ${CONF[$1;MAC]} | sed 's/vl-/vc-/')
+		CONF[$1;IP4]=192.168.$((193+((0x$SHA / 254) % 62))).$((0x$SHA % 254))
+	else
+		read CONF[$1;TAP] CONF[$1;MAC] CONF[$1;IP4] <<<"${CONF[$1;NETWORK]}"
+	fi
+}
+
+
+function hostdefaults() {
+	if [ -z "${CONF[$HOSTNAME;IMAGE]}" ]; then echo "Error: Image not set"; return 1; fi
+	if [ -z "${CONF[$HOSTNAME;ARCH]}" ]; then CONF[$HOSTNAME;ARCH]=x86_64; fi
+	if [ -z "${CONF[$HOSTNAME;MEMORY]}" ]; then CONF[$HOSTNAME;MEMORY]=64M; fi
+	if [ "${CONF[$HOSTNAME;COW]^^}" = "YES" ] || [ "${CONF[$HOSTNAME;COW]}" = "-snapshot" ]; then CONF[$HOSTNAME;COW]=-snapshot; else CONF[$HOSTNAME;COW]=; fi
+
+	hostctlnet $HOSTNAME
+
+	HOSTS[$HOSTNAME]=true
+	HOSTNAME=
+}
+
+function copyhost() {
+	local src=$1
+	shift
+	if [ -z "${HOSTS[$src]}" ]; then
+		echo "No host '$src' found to copy from in config."
+		exit 2
+	fi
+
+	for H in "$@"; do
+		eval $(echo ${!CONF[@]} | tr ' ' '\n' | sed -rn "/^$src;/{ s/$src;//; s/.*/CONF[$H;&]=\\\${CONF[$src;&]}/p }")
+		hostctlnet $H
+		HOSTS[$H]=true
+	done
+}
+
+function linkhosts() {
+	local NAME=$1
+	local an=$2
+	local ai=$3
+	local bn=$4
+	local bi=$5
+	
+	if [ -z "$an" ] || [ -z "$ai" ] || [ -z "$bn" ] || [ -z "$bi" ]; then
+		echo "Link usage: 'Link host IP host IP' in config."
+		exit 2
+	fi
+
+	local SHA=$(sha1sum <<<"$an;$ai;$bn;$bi" | head -c 20)
+	local AMAC=$(getmac ${SHA:0:8})
+	local BMAC=$(getmac ${SHA:8:8})
+	local TAG=$((100 + (0x${SHA:16:4} % 3800)))
+
+	CONF[$an;NIC]="${CONF[$an;NIC]} $NAME;$AMAC;$TAG;$ai;$bi"
+	CONF[$bn;NIC]="${CONF[$bn;NIC]} $NAME;$BMAC;$TAG;$bi;$ai"
+}
+
+function nethosts() {
+	local SHA=$(sha1sum <<<"$*" | head -c 20)
+	local TAG=$((100 + (0x${SHA:0:4} % 3800)))
+	local H
+	local A
+	local MAC
+
+	local NAME=$1
+	shift
+
+	until [ -z "$1" ]; do
+		if [ -z "$2" ]; then
+			echo "Missing address for interface $1 in config."
+			exit 2
+		fi
+
+		H=$1
+		A=$2
+		SHA=$(sha1sum <<<"$SHA $H $A" | head -c 20)
+		MAC=$(getmac ${SHA:0:8})
+		shift 2
+		CONF[$H;NIC]="${CONF[$H;NIC]} $NAME;$MAC;$TAG;$A;"
+	done
+}
+
+function grehosts() {
+	local NAME=$1
+	local an=$2
+	local ai=$3
+	local bn=$4
+	local bi=$5
+	
+	if [ -z "$an" ] || [ -z "$ai" ] || [ -z "$bn" ] || [ -z "$bi" ]; then
+		echo "Link usage: 'Link host IP host IP' in config."
+		exit 2
+	fi
+
+	CONF[$an;GRE]="${CONF[$an;GRE]} $NAME;$bn;$ai;$bi"
+	CONF[$bn;GRE]="${CONF[$bn;GRE]} $NAME;$an;$bi;$ai"
+}
+
+function sockethosts() {
+  local NAME=$1
+  local PORT=$2
+  local an=$3
+  local ai=$4
+
+  shift 4
+
+  if [ -z "$PORT" ] || [ -z "$NAME" ] || [ -z "$an" ] || [ -z "$ai" ]; then
+    echo "Socket usage: Socket PORT host IP [[host IP] ...]"
+    exit 2
+  fi
+
+	local SHA=$(sha1sum <<<"$NAME;$PORT;$an;$ai" | head -c 20)
+	local AMAC=$(getmac ${SHA:0:8})
+
+  CONF[$an;SOCK]="${CONF[$an;SOCK]} $NAME;listen=127.0.0.1:$PORT;$AMAC;$ai"
+
+  while [ ! -z "$1" ] && [ ! -z "$2" ]; do
+    local bn=$1
+    local bi=$2
+    local SHA=$(sha1sum <<<"$NAME;$PORT;$an;$ai;$bn;$bi" | head -c 20)
+    local BMAC=$(getmac ${SHA:0:8})
+    shift 2
+    CONF[$bn;SOCK]="${CONF[$bn;SOCK]} $NAME;connect=127.0.0.1:$PORT;$BMAC;$bi"
+  done
+
+  if [ ! -z "$1" ]; then
+    echo "Socket usage: Socket PORT host IP [[host IP] ...]"
+    exit 2
+  fi
+}
+
+function dummynic() {
+	local h=$1
+	local n=$2
+	local v4=$3
+	local v6=$4
+
+	if [ -z "$v4" ] || [ -z "$v6" ]; then
+		echo "Dummy usage: 'Dummy name IP4 IP6' in config."
+		exit 2
+	fi
+
+	CONF[$h;DUMMY]="${CONF[$h;DUMMY]} $n;$v4;$v6"
+}
+
+varput() {
+	local h=$1
+	shift
+
+	while [ -n "$1" ]; do
+		CONF[$h;VARS]="${CONF[$h;VARS]} $1"
+		shift
+	done
+}
+
+HOSTNAME=
+while read item value; do
+	if [ -z "$HOSTNAME" ]; then
+		if [ -z "$item" ]; then
+			continue
+		elif [ "${item^^}" = "HOST" ]; then
+			HOSTNAME=$value
+			continue
+		else
+			echo "Config must begin by host definition."
+			exit 2
+		fi
+	fi
+	
+	if [ -z "$item" ]; then continue; fi
+
+	case ${item^^} in
+		\#*)	continue ;;
+		HOST)	hostdefaults
+			HOSTNAME=$value
+			;;
+		IMAGE)	CONF[$HOSTNAME;IMAGE]="$value" ;;
+		NETWORK)CONF[$HOSTNAME;NETWORK]="$value" ;;
+		CDROM)	CONF[$HOSTNAME;CDROM]="$value" ;;
+		ARCH)	CONF[$HOSTNAME;ARCH]="$value" ;;
+		MEMORY)	CONF[$HOSTNAME;MEMORY]="$value" ;;
+		COW)	CONF[$HOSTNAME;COW]="$value" ;;
+		VNC)	CONF[$HOSTNAME;VNCID]="$value" ;;
+		TYPE)	CONF[$HOSTNAME;TYPE]="$value" ;;
+		COPY)	copyhost $value ;;
+		LINK)	linkhosts $value ;;
+		NET)	nethosts $value ;;
+		GRE)	grehosts $value ;;
+		DUMMY)	dummynic $value ;;
+		VAR)	varput $value ;;
+		SOCKET)	sockethosts $value ;;
+		*)	echo "Unknown directive '$item' in config"
+			exit 2 ;;
+	esac
+done <$VIRTUALS
+
+hostdefaults
+HOSTNAME=
+
+function gethost() {
+  local NAME=$1 SUFFIX ID HEXID
+  if [ -e $ROOT/run/tmp-$NAME ]; then
+    SUFFIX=$(<$ROOT/run/tmp-$NAME)
+    ID=$(basename $(readlink -f $ROOT/run/tmp-$NAME))
+    ID=${ID##tmp-}
+    HEXID=$(printf "%02x" $ID)
+    NAME=${NAME%%-$SUFFIX}
+  fi
+
+	if ${HOSTS[$NAME]}; then
+		eval $(echo ${!CONF[@]} | tr ' ' '\n' | sed -rn "/^$NAME;/{ s/$NAME;//; s/.*/HOST&=\"\\\${CONF[$NAME;&]}\"/p }")
+		HOSTNAME=$1
+    if [ -n "$SUFFIX" ]; then
+#      echo "Assigned MAC for $NAME is $HOSTMAC, tapname is $HOSTTAP"
+      HOSTMAC=$(echo $HOSTMAC | sed "s/^52:54/52:$HEXID/")
+      HOSTTAP=$(echo $HOSTTAP | sed "s/^vc-5254/vc-52$HEXID/")
+      HOSTIP4=192.168.255.$(($ID % 254))
+      HOSTNIC=
+#      echo "Changed to $HOSTMAC, tapname $HOSTTAP"
+    fi
+		return 0
+	else
+		echo "Unknown host: $1"
+		return 1
+	fi
+}
+
+function hostlist() {
+	for H in ${!HOSTS[@]}; do echo $H; ls $ROOT/run/tmp-$H-* 2>/dev/null | sed "s#.*run/tmp-##"; done | sort
+}

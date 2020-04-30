@@ -1,0 +1,43 @@
+10.0.1.0/24 dev ve1 proto kernel scope link src 10.0.1.1 
+10.0.1.0/24 dev ve1 proto bird scope link metric 32 
+10.0.2.0/24 via 10.0.1.2 dev ve1 proto bird metric 32 
+10.0.3.0/24 via 10.0.7.4 dev ve3 proto bird metric 32 
+10.0.4.0/24 via 10.0.7.5 dev ve3 proto bird metric 32 
+10.0.5.0/24 proto bird metric 32 
+	nexthop via 10.0.7.5 dev ve3 weight 1 
+	nexthop via 10.0.7.6 dev ve3 weight 1 
+10.0.6.0/24 via 10.0.7.6 dev ve3 proto bird metric 32 
+10.0.7.0/24 dev ve3 proto kernel scope link src 10.0.7.3 
+10.0.7.3 dev ve3 proto bird scope link metric 32 
+10.0.7.4 via 10.0.7.4 dev ve3 proto bird metric 32 
+10.0.7.5 via 10.0.7.5 dev ve3 proto bird metric 32 
+10.0.7.6 via 10.0.7.6 dev ve3 proto bird metric 32 
+10.1.1.0/24 via 10.0.1.2 dev ve1 proto bird metric 32 
+10.1.20.0/24 via 10.0.1.2 dev ve1 proto bird metric 32 
+10.1.21.0/24 via 10.0.1.2 dev ve1 proto bird metric 32 
+10.2.1.0/24 proto bird metric 32 
+	nexthop via 10.0.1.2 dev ve1 weight 1 
+	nexthop via 10.0.7.4 dev ve3 weight 1 
+10.2.20.0/24 proto bird metric 32 
+	nexthop via 10.0.1.2 dev ve1 weight 1 
+	nexthop via 10.0.7.4 dev ve3 weight 1 
+10.2.21.0/24 proto bird metric 32 
+	nexthop via 10.0.1.2 dev ve1 weight 1 
+	nexthop via 10.0.7.4 dev ve3 weight 1 
+10.3.1.0/24 dev ve0 proto kernel scope link src 10.3.1.1 
+10.3.1.0/24 dev ve0 proto bird scope link metric 32 
+10.4.1.0/24 via 10.0.7.4 dev ve3 proto bird metric 32 
+10.4.20.0/24 via 10.0.7.4 dev ve3 proto bird metric 32 
+10.4.21.0/24 via 10.0.7.4 dev ve3 proto bird metric 32 
+10.5.1.0/24 via 10.0.7.5 dev ve3 proto bird metric 32 
+10.5.20.0/24 via 10.0.7.5 dev ve3 proto bird metric 32 
+10.5.21.0/24 via 10.0.7.5 dev ve3 proto bird metric 32 
+10.6.1.0/24 via 10.0.7.6 dev ve3 proto bird metric 32 
+10.6.20.0/24 via 10.0.7.6 dev ve3 proto bird metric 32 
+10.6.21.0/24 via 10.0.7.6 dev ve3 proto bird metric 32 
+10.7.1.0/24 via 10.0.7.5 dev ve3 proto bird metric 32 
+10.7.20.0/24 via 10.0.7.5 dev ve3 proto bird metric 32 
+10.7.21.0/24 via 10.0.7.5 dev ve3 proto bird metric 32 
+10.8.1.0/24 via 10.0.7.6 dev ve3 proto bird metric 32 
+10.8.20.0/24 via 10.0.7.6 dev ve3 proto bird metric 32 
+10.8.21.0/24 via 10.0.7.6 dev ve3 proto bird metric 32

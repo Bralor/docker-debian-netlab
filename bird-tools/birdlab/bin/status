@@ -1,0 +1,52 @@
+#!/bin/bash
+. $(dirname $(readlink -f $0))/virt-lib
+
+if [ "$1" == "-n" ]; then
+  shift
+  DO_PING=false
+else
+  DO_PING=true
+fi
+
+if [ "$1" == "-v" ]; then
+	for C in $(echo ${!CONF[@]} | tr ' ' '\n' | sort); do
+		echo $C: ${CONF[$C]}
+	done
+	exit 0
+fi
+
+declare -A seen
+seen[dhcpd]=1
+
+for H in $(hostlist); do
+	if [ -S $ROOT/run/$H.sock ]; then
+    if [ -e $ROOT/run/tmp-$H ]; then
+      ID=$(basename $(readlink -f $ROOT/run/tmp-$H))
+      ID=${ID##tmp-}
+      HOSTIP4=192.168.255.$(($ID % 254))
+    else
+      HOSTIP4=${CONF[$H;IP4]}
+    fi
+
+    if $DO_PING; then
+      if ping -nc1 $HOSTIP4 >/dev/null; then
+        PING="(ping ok)"
+      else
+        PING="(ping FAIL)"
+      fi
+    else
+      PING=""
+    fi
+			
+		echo "$H running, IPv4 $HOSTIP4 $PING, monitor $ROOT/run/$H.sock"
+	elif [ -f $ROOT/run/$H.pid ]; then
+		if ps -p $(<$ROOT/run/$H.pid) >/dev/null; then
+			echo "$H probably running at PID $(<$ROOT/run/$H.pid), no socket, IPv4 ${CONF[$H;IP4]}"
+		else
+			echo "$H stopped, $ROOT/run/$H.pid stale pidfile found, removing"
+			rm $ROOT/run/$H.pid
+		fi
+	else
+		echo "$H stopped"
+	fi
+done

@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -e
+
+while getopts ":c:h:" OPTION; do
+	case "${OPTION}" in
+		c)
+			CONF=${OPTARG}
+			if [ -d "$CONF" ]; then
+				echo -e "Creating symlink config --> $CONF\n"
+				ln -s "${CONF}" config
+				. netlab_lib
+				. config/config
+			
+			else
+				echo "Incorrect name of protocol"
+			fi
+			;;
+
+		h|--h)
+			echo -e "USAGE: $0 [-c <cf-ospf|cf-babel|...> ]\n"
+			;;
+	esac
+done

@@ -1,0 +1,9 @@
+#!/bin/bash
+
+. netlab_lib
+
+netlab_stop
+
+if [ -L config ]
+then unlink config
+fi

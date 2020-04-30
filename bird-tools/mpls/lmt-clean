@@ -1,0 +1,41 @@
+#!/bin/bash
+set -x
+
+# During development, the iproute2 compiled source code was located in /home/moskyto/iproute2.
+IPROUTE=/home/moskyto/iproute2
+alias ip=$IPROUTE/ip/ip
+nsip() {
+  NS=$1
+  shift
+  $IPROUTE/ip/ip netns exec $NS $IPROUTE/ip/ip "$@"
+}
+
+nsip ce1a link del ce1a
+nsip ce2a link del ce2a
+nsip ce1b link del ce1b
+nsip ce2b link del ce2b
+nsip ce1 link del ce1
+nsip ce2 link del ce2
+nsip pe1 link del pe1
+nsip pe2 link del pe2
+nsip p link del p
+
+nsip p link del pe1
+nsip p link del pe2
+
+nsip pe1 link del ce1a
+nsip pe2 link del ce2a
+nsip pe1 link del ce1b
+nsip pe2 link del ce2b
+nsip pe1 link del ce1
+nsip pe2 link del ce2
+
+ip netns del ce1a
+ip netns del ce2a
+ip netns del ce1b
+ip netns del ce2b
+ip netns del ce1
+ip netns del ce2
+ip netns del pe1
+ip netns del pe2
+ip netns del p

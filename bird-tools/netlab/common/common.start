@@ -1,0 +1,21 @@
+
+if [ -f $COMMON/bird ]
+then
+ln -s $COMMON/bird bird
+ln -s $COMMON/birdc birdc
+ln -s $CONFIG/bird_$1.conf bird.conf
+fi
+
+sysctl net.ipv4.ip_forward=1
+sysctl net.ipv4.tcp_l3mdev_accept=1
+sysctl net.ipv6.conf.all.forwarding=1
+
+if [ -f /proc/sys/net/mpls/platform_labels ]
+then
+sysctl net.mpls.platform_labels=1024
+fi
+
+ulimit -c unlimited
+./bird -l -P bird.pid
+#./bird -c bird.conf -s bird.ctl
+

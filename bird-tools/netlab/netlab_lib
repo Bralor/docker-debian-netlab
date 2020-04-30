@@ -1,0 +1,186 @@
+
+shopt -s nullglob
+
+export COMMON="../common"
+export CONFIG="../config"
+
+BNS="bridge-ns"
+
+function netlab_init_node()
+{
+	N=$1
+	ip netns add $N
+	echo Preparing $N
+	mkdir $N
+	touch $N/netns
+
+	sleep .1
+	ip netns exec $N ip -4 rule add l3mdev priority 1000
+	ip netns exec $N ip -6 rule add l3mdev priority 1000
+	ip netns exec $N ip link set lo up
+}
+
+
+function netlab_init()
+{
+	ip netns add $BNS
+
+	for N in $NETLAB_NODES
+	do netlab_init_node $N
+	done
+
+	echo
+}
+
+
+function netlab_start_node()
+{
+	N=$1
+	echo Starting $N
+
+	cd $N
+
+	if [ -f $CONFIG/$N.start ]
+	then ip netns exec $N bash $CONFIG/$N.start $N
+	fi
+
+	if [ -f $COMMON/common.start ]
+	then ip netns exec $N bash $COMMON/common.start $N
+	fi
+
+	cd ..
+	echo
+}
+
+
+function netlab_stop_node()
+{
+	N=$1
+
+	echo Stopping $N
+	cd $N
+
+	if [ -f $COMMON/common.stop ]
+	then ip netns exec $N bash $COMMON/common.stop $N
+	fi
+
+	if [ -f $CONFIG/$N.stop ]
+	then ip netns exec $N bash $CONFIG/$N.stop $N
+	fi
+
+	cd ..
+	rm -rf $N
+	echo
+}
+
+
+function netlab_start()
+{
+	for N in $NETLAB_NODES
+	do netlab_start_node $N
+	done
+}
+
+
+function netlab_stop()
+{
+	for N in */netns
+	do
+		netlab_stop_node ${N%/netns}
+		ip netns del ${N%/netns}
+	done
+
+	if [ "$(ip netns list | grep $BNS)" = "$BNS" ]
+	then ip netns del $BNS
+	fi
+}
+
+
+function if_net()
+{
+	IF=$1
+
+	ip link add name $IF netns $BNS type bridge
+	ip netns exec $BNS ip link set $IF up
+}
+
+
+function if_dummy()
+{
+	NS=${1%%/*}
+	IF=$2
+
+	ip link add name $IF netns $NS type dummy
+	if [[ $1 == */* ]]; then ip netns exec $NS ip link set $IF vrf ${1##*/} ; fi
+
+	ip netns exec $NS ip link set $IF up
+
+	if [[ $3 == */* ]]
+	then ip netns exec $NS ip addr add $3 dev $IF
+	else ip netns exec $NS ip addr add "${3}.1/24" dev $IF
+	fi
+
+	if [[ $4 == */* ]]
+	then ip netns exec $NS ip addr add $4 dev $IF
+	else ip netns exec $NS ip addr add "${4}::1/64" dev $IF
+	fi
+}
+
+
+function if_veth()
+{
+	NS1=${1%%/*}
+	IF1=$2
+	NS2=${3%%/*}
+	IF2=$4
+
+	ip link add name $IF1 netns $NS1 type veth peer name $IF2 netns $NS2
+	if [[ $1 == */* ]]; then ip netns exec $NS1 ip link set $IF1 vrf ${1##*/} ; fi
+	if [[ $3 == */* ]]; then ip netns exec $NS2 ip link set $IF2 vrf ${3##*/} ; fi
+
+	ip netns exec $NS1 ip link set $IF1 up
+	ip netns exec $NS2 ip link set $IF2 up
+	ip netns exec $NS1 ip addr add ${5}.1/24 dev $IF1
+	ip netns exec $NS2 ip addr add ${5}.2/24 dev $IF2
+
+	if [ -n "$6" ]
+	then
+		ip netns exec $NS1 ip addr add ${6}::1/64 dev $IF1
+		ip netns exec $NS2 ip addr add ${6}::2/64 dev $IF2
+	fi
+}
+
+
+function if_link()
+{
+	NS1=${1%%/*}
+	IF1=$2
+	NS2=$BNS
+	IF2=${NS1}-${IF1}
+	NET=$3
+
+	ip link add name $IF1 netns $NS1 type veth peer name $IF2 netns $NS2
+
+	if [[ $1 == */* ]]; then ip netns exec $NS1 ip link set $IF1 vrf ${1##*/} ; fi
+
+	ip netns exec $NS2 ip link set $IF2 master $NET
+
+	ip netns exec $NS1 ip link set $IF1 up
+	ip netns exec $NS2 ip link set $IF2 up
+	ip netns exec $NS1 ip addr add ${4}/24 dev $IF1
+
+	if [ -n "$5" ]
+	then
+		ip netns exec $NS1 ip addr add ${5}/64 dev $IF1
+	fi
+}
+
+
+function vrf()
+{
+	NS=$1
+	IF=$2
+
+	ip link add name $IF netns $NS type vrf table $3
+	ip netns exec $NS ip link set $IF up
+}

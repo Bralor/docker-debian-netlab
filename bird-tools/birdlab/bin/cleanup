@@ -1,0 +1,12 @@
+#!/bin/bash
+. $(dirname $0)/virt-lib
+
+[ -f $ROOT/run/dhcpd.pid ] && kill $(cat $ROOT/run/dhcpd.pid)
+
+iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+iptables -D FORWARD -i eth0 -o $VIRTCTRL -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -D FORWARD -i eth0 -o $VIRTCTRL -j ACCEPT
+iptables -D FORWARD -i $VIRTCTRL -o eth0 -j ACCEPT
+iptables -D FORWARD -o eth0 -j REJECT
+
+ovs-vsctl del-br $VIRTBR

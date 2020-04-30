@@ -1,0 +1,20 @@
+_virt() {
+	local cur prev opts
+	COMPREPLY=()
+	cur="${COMP_WORDS[COMP_CWORD]}"
+	prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+	case "$prev" in
+		start)	opts=$(vctl status | sed -n "s/ not running$//p")
+			;;
+		stop)	opts=$(vctl status | grep -v "not running" | sed "s/ .*//")
+			;;
+		*)	opts=$(vctl | tail -n+2)
+			;;
+	esac
+
+	COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+	return 0
+}
+
+complete -F _virt vctl

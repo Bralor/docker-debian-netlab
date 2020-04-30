@@ -1,0 +1,47 @@
+
+NETLAB_NODES="\
+m1 m2 m3 m4 \
+m5 m6 m7 m8 \
+m9 m10"
+
+netlab_init
+
+vrf m1 vrf1 100
+vrf m1 vrf2 200
+vrf m1 vrf3 300
+
+vrf m8 vrf3 300
+vrf m9 vrf3 300
+vrf m10 vrf3 300
+
+if_dummy m1 vf0 10.1.1 2001:db8:1:1
+if_dummy m2 ve0 10.1.2 2001:db8:1:2
+if_dummy m3 ve0 10.1.3 2001:db8:1:3
+if_dummy m4 ve0 10.1.4 2001:db8:1:4
+
+if_dummy m1/vrf2 vf1 10.2.1 2001:db8:2:1
+if_dummy m5 ve0 10.2.2 2001:db8:2:2
+if_dummy m6 ve0 10.2.3 2001:db8:2:3
+if_dummy m7 ve0 10.2.4 2001:db8:2:4
+
+if_dummy m1/vrf3 vf2 10.3.1 2001:db8:3:1
+if_dummy m8 ve0 10.3.2 2001:db8:3:2
+if_dummy m9 ve0 10.3.3 2001:db8:3:3
+if_dummy m10 ve0 10.3.4 2001:db8:3:4
+
+if_veth m1 ve1 m2 ve2 10.1.5
+if_veth m2 ve1 m3 ve2 10.1.6
+if_veth m3 ve1 m4 ve2 10.1.7
+if_veth m4 ve1 m1 ve2 10.1.8
+
+if_veth m1/vrf2 ve3 m5 ve2 10.2.5
+if_veth m5 ve1 m6 ve2 10.2.6
+if_veth m6 ve1 m7 ve2 10.2.7
+if_veth m7 ve1 m1/vrf2 ve4 10.2.8
+
+if_veth m1/vrf3 ve5 m8 ve2 10.3.5
+if_veth m8 ve1 m9 ve2 10.3.6
+if_veth m9 ve1 m10 ve2 10.3.7
+if_veth m10 ve1 m1/vrf3 ve6 10.3.8
+
+netlab_start

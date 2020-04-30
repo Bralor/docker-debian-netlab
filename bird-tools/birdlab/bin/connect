@@ -1,0 +1,32 @@
+#!/bin/bash
+. $(dirname $(readlink -f $0))/virt-lib
+
+NETLIST=$ROOT/run/networks
+
+NET=$1
+if [ -z "$NET" ] || [ -z "$2" ]; then
+	echo "Usage: $0 NET hosts"
+	exit 2
+fi
+
+shift
+
+if grep -q $NET $NETLIST; then
+	echo "Network $NET exists"
+	exit 2
+fi
+
+MAXID=$(sort -k1,1nr $NETLIST | head -n1|cut -f1 -d' ')
+MAXID=$((MAXID+1))
+
+echo "$MAXID $NET" >> $NETLIST
+
+i=0
+idprefix=auto-$MAXID
+
+for H in "$@"; do
+	$ROOT/bin/addnic $H $idprefix-$i
+	ip link set $idprefix-$i up
+	ovs-vsctl add-port $VIRTBR $idprefix-$i tag=$MAXID
+	i=$((i+1))
+done

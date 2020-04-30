@@ -1,0 +1,23 @@
+#!/bin/bash
+. $(dirname $0)/virt-lib
+
+vsctl add-br $VIRTBR
+
+ip link set $VIRTBR up
+ip addr add 192.168.10.1/28 dev $VIRTBR
+
+ip link add $VIRTCTRL type veth peer name $VIRTUPLINK
+ip link set $VIRTCTRL up
+ip link set $VIRTUPLINK up
+ip addr add 192.168.192.1/18 dev $VIRTCTRL
+ip -6 addr add 2001:1488:A001::1/64 dev $VIRTCTRL
+
+vsctl add-port $VIRTBR $VIRTUPLINK tag=1
+
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+iptables -A FORWARD -i eth0 -o $VIRTCTRL -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -A FORWARD -i eth0 -o $VIRTCTRL -j ACCEPT
+iptables -A FORWARD -i $VIRTCTRL -o eth0 -j ACCEPT
+iptables -A FORWARD -o eth0 -j REJECT
+
+dhcpd -cf $ROOT/etc/dhcpd.conf -pf $ROOT/run/dhcpd.pid $VIRTCTRL

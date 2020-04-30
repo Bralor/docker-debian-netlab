@@ -1,0 +1,8 @@
+
+if [ -S bird4.ctl -o -S bird.ctl ]
+then ./birdc4 -l down
+fi
+
+if [ -S bird6.ctl ]
+then ./birdc6 -l down
+fi

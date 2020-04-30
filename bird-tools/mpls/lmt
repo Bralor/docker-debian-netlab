@@ -1,0 +1,162 @@
+#!/bin/bash
+set -x
+
+# This script creates a testing MPLS network at Linux.
+# Requirements:
+# - iproute2 >=4.4
+# - linux kernel >=4.4 with loaded modules mpls_router and mpls_iptunnel
+# 
+# CE1 -- PE1 [ MPLS -- P -- MPLS ] PE2 -- CE2
+
+modprobe mpls_router
+modprobe mpls_iptunnel
+
+# During development, the iproute2 compiled source code was located in /home/moskyto/iproute2.
+IPROUTE=/home/moskyto/iproute2
+alias ip=$IPROUTE/ip/ip
+nsip() {
+  NS=$1
+  shift
+  $IPROUTE/ip/ip netns exec $NS $IPROUTE/ip/ip "$@"
+}
+
+# Create namespaces
+ip netns add ce1a
+ip netns add ce1b
+ip netns add ce2a
+ip netns add ce2b
+ip netns add pe1
+ip netns add pe2
+ip netns add p
+
+# Loopback up
+nsip ce1a link set lo up
+nsip ce1b link set lo up
+nsip ce2a link set lo up
+nsip ce2b link set lo up
+nsip pe1 link set lo up
+nsip pe2 link set lo up
+nsip p link set lo up
+
+# Dummy ifaces
+nsip ce1a link add ce1a type dummy
+nsip ce1a link set ce1a up
+nsip ce1a addr add 10.99.0.1/32 dev ce1a
+
+nsip ce1b link add ce1b type dummy
+nsip ce1b link set ce1b up
+nsip ce1b addr add 10.99.0.1/32 dev ce1b
+
+nsip ce2a link add ce2a type dummy
+nsip ce2a link set ce2a up
+nsip ce2a addr add 10.99.0.2/32 dev ce2a
+
+nsip ce2b link add ce2b type dummy
+nsip ce2b link set ce2b up
+nsip ce2b addr add 10.99.0.2/32 dev ce2b
+
+nsip pe1 link add pe1 type dummy
+nsip pe1 link set pe1 up
+nsip pe1 addr add 10.199.0.1/32 dev pe1
+
+nsip p link add p type dummy
+nsip p link set p up
+nsip p addr add 10.199.1.1/32 dev p
+
+nsip pe2 link add pe2 type dummy
+nsip pe2 link set pe2 up
+nsip pe2 addr add 10.199.0.3/32 dev pe2
+
+# PE-P links
+nsip p link add pe1 type veth peer name p netns pe1
+nsip p link add pe2 type veth peer name p netns pe2
+
+nsip p link set pe1 up
+nsip p link set pe2 up
+
+nsip p addr add 10.1.1.1/32 peer 10.1.1.2/32 dev pe1
+nsip p addr add 10.1.2.1/32 peer 10.1.2.2/32 dev pe2
+
+nsip pe1 link set p up
+nsip pe2 link set p up
+
+nsip pe1 addr add 10.1.1.2/32 peer 10.1.1.1/32 dev p
+nsip pe2 addr add 10.1.2.2/32 peer 10.1.2.1/32 dev p
+
+# PE-CE links
+nsip pe1 link add ce1a type veth peer name pe1 netns ce1a
+nsip pe1 link add ce1b type veth peer name pe1 netns ce1b
+nsip pe2 link add ce2a type veth peer name pe2 netns ce2a
+nsip pe2 link add ce2b type veth peer name pe2 netns ce2b
+
+nsip pe1 link set ce1a up
+nsip pe1 link set ce1b up
+nsip pe2 link set ce2a up
+nsip pe2 link set ce2b up
+
+nsip pe1 addr add 10.10.1.1/32 peer 10.10.1.2/32 dev ce1a
+nsip pe1 addr add 10.10.1.1/32 peer 10.10.1.2/32 dev ce1b
+nsip pe2 addr add 10.10.2.1/32 peer 10.10.2.2/32 dev ce2a
+nsip pe2 addr add 10.10.2.1/32 peer 10.10.2.2/32 dev ce2b
+
+nsip ce1a link set pe1 up
+nsip ce1b link set pe1 up
+nsip ce2a link set pe2 up
+nsip ce2b link set pe2 up
+
+nsip ce1a addr add 10.10.1.2/32 peer 10.10.1.1/32 dev pe1
+nsip ce1b addr add 10.10.1.2/32 peer 10.10.1.1/32 dev pe1
+nsip ce2a addr add 10.10.2.2/32 peer 10.10.2.1/32 dev pe2
+nsip ce2b addr add 10.10.2.2/32 peer 10.10.2.1/32 dev pe2
+
+# Allow MPLS processing
+echo 1 | $IPROUTE/ip/ip netns exec p tee /proc/sys/net/mpls/conf/pe1/input
+echo 1 | $IPROUTE/ip/ip netns exec p tee /proc/sys/net/mpls/conf/pe2/input
+echo 1 | $IPROUTE/ip/ip netns exec pe1 tee /proc/sys/net/mpls/conf/p/input
+echo 1 | $IPROUTE/ip/ip netns exec pe2 tee /proc/sys/net/mpls/conf/p/input
+
+# Raise MPLS label limit
+echo 200 | $IPROUTE/ip/ip netns exec pe1 tee /proc/sys/net/mpls/platform_labels
+echo 200 | $IPROUTE/ip/ip netns exec pe2 tee /proc/sys/net/mpls/platform_labels
+echo 200 | $IPROUTE/ip/ip netns exec p tee /proc/sys/net/mpls/platform_labels
+
+# Allow IPv4 forwarding
+echo 1 | $IPROUTE/ip/ip netns exec pe1 tee /proc/sys/net/ipv4/ip_forward
+echo 1 | $IPROUTE/ip/ip netns exec pe2 tee /proc/sys/net/ipv4/ip_forward
+echo 1 | $IPROUTE/ip/ip netns exec p tee /proc/sys/net/ipv4/ip_forward
+
+# Client routes
+nsip ce1a route add 10.99.0.2/32 via 10.10.1.1
+nsip ce1a route add 10.10.2.2/32 via 10.10.1.1
+nsip ce1b route add 10.99.0.2/32 via 10.10.1.1
+nsip ce1b route add 10.10.2.2/32 via 10.10.1.1
+nsip ce2a route add 10.99.0.1/32 via 10.10.2.1
+nsip ce2a route add 10.10.1.2/32 via 10.10.2.1
+nsip ce2b route add 10.99.0.1/32 via 10.10.2.1
+nsip ce2b route add 10.10.1.2/32 via 10.10.2.1
+
+# Per-client routing table
+nsip pe1 rule add iif ce1a table 16
+nsip pe1 rule add iif ce1b table 17
+nsip pe2 rule add iif ce2a table 16
+nsip pe2 rule add iif ce2b table 17
+
+# Encap rules
+nsip pe1 route add 10.99.0.2/32 encap mpls 18/16 via 10.1.1.1 table 16
+nsip pe1 route add 10.99.0.2/32 encap mpls 18/17 via 10.1.1.1 table 17
+nsip pe1 route add 10.10.2.2/32 encap mpls 18/16 via 10.1.1.1 table 16
+nsip pe1 route add 10.10.2.2/32 encap mpls 18/17 via 10.1.1.1 table 17
+nsip pe2 route add 10.99.0.1/32 encap mpls 19/16 via 10.1.2.1 table 16
+nsip pe2 route add 10.99.0.1/32 encap mpls 19/17 via 10.1.2.1 table 17
+nsip pe2 route add 10.10.1.2/32 encap mpls 19/16 via 10.1.2.1 table 16
+nsip pe2 route add 10.10.1.2/32 encap mpls 19/17 via 10.1.2.1 table 17
+
+# MPLS rules at P
+nsip p -f mpls route add 18 via inet 10.1.2.2
+nsip p -f mpls route add 19 via inet 10.1.1.2
+
+# Decap rules
+nsip pe1 -f mpls route add 16 via inet 10.10.1.2 dev ce1a
+nsip pe1 -f mpls route add 17 via inet 10.10.1.2 dev ce1b
+nsip pe2 -f mpls route add 16 via inet 10.10.2.2 dev ce2a
+nsip pe2 -f mpls route add 17 via inet 10.10.2.2 dev ce2b

@@ -1,0 +1,44 @@
+
+NETLAB_NODES="\
+m11 m12 m13 m14 \
+m21 m22 m23 m24 \
+m31 m32 m33 m34 \
+m41 m42 m43 m44"
+
+netlab_init
+
+if_dummy m11 ve0 10.1.1 2001:db8:1:1
+if_dummy m12 ve0 10.1.2 2001:db8:1:2
+if_dummy m13 ve0 10.1.3 2001:db8:1:3
+if_dummy m14 ve0 10.1.4 2001:db8:1:4
+if_dummy m21 ve0 10.2.1 2001:db8:2:1
+if_dummy m22 ve0 10.2.2 2001:db8:2:2
+if_dummy m23 ve0 10.2.3 2001:db8:2:3
+if_dummy m24 ve0 10.2.4 2001:db8:2:4
+if_dummy m31 ve0 10.3.1 2001:db8:3:1
+if_dummy m32 ve0 10.3.2 2001:db8:3:2
+if_dummy m33 ve0 10.3.3 2001:db8:3:3
+if_dummy m34 ve0 10.3.4 2001:db8:3:4
+if_dummy m41 ve0 10.4.1 2001:db8:4:1
+if_dummy m42 ve0 10.4.2 2001:db8:4:2
+if_dummy m43 ve0 10.4.3 2001:db8:4:3
+if_dummy m44 ve0 10.4.4 2001:db8:4:4
+
+if_veth m11 ve1 m12 ve2 10.1.10 2001:db8:1:10
+if_veth m12 ve1 m13 ve2 10.1.11 2001:db8:1:11
+if_veth m13 ve1 m14 ve2 10.1.12 2001:db8:1:12
+if_veth m14 ve1 m21 ve2 10.1.13 2001:db8:1:13
+if_veth m21 ve1 m22 ve2 10.2.10 2001:db8:2:10
+if_veth m22 ve1 m23 ve2 10.2.11 2001:db8:2:11
+if_veth m23 ve1 m24 ve2 10.2.12 2001:db8:2:12
+if_veth m24 ve1 m31 ve2 10.2.13 2001:db8:2:13
+if_veth m31 ve1 m32 ve2 10.3.10 2001:db8:3:10
+if_veth m32 ve1 m33 ve2 10.3.11 2001:db8:3:11
+if_veth m33 ve1 m34 ve2 10.3.12 2001:db8:3:12
+if_veth m34 ve1 m41 ve2 10.3.13 2001:db8:3:13
+if_veth m41 ve1 m42 ve2 10.4.10 2001:db8:4:10
+if_veth m42 ve1 m43 ve2 10.4.11 2001:db8:4:11
+if_veth m43 ve1 m44 ve2 10.4.12 2001:db8:4:12
+if_veth m44 ve1 m11 ve2 10.4.13 2001:db8:4:13
+
+netlab_start

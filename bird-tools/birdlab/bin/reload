@@ -1,0 +1,5 @@
+#!/bin/bash
+. $(dirname $(readlink -f $0))/virt-lib
+
+[ -f $ROOT/run/dhcpd.pid ] && kill $(cat $ROOT/run/dhcpd.pid)
+dhcpd -cf $ROOT/etc/dhcpd.conf -pf $ROOT/run/dhcpd.pid $VIRTCTRL

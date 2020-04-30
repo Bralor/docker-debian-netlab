@@ -1,0 +1,15 @@
+#!/bin/bash
+. $(dirname $(readlink -f $0))/virt-lib
+
+NAME=$1
+ID=$2
+
+if [ -z "$NAME" ] || [ -z "$ID" ]; then
+	echo "Usage: $0 NAME ID"
+	exit 2
+fi
+
+socat UNIX-CONNECT:$ROOT/run/$NAME.sock - >/dev/null <<EOF
+netdev_del $ID
+device_del e1000,netdev=$ID
+EOF

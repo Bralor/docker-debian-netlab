@@ -1,0 +1,27 @@
+10.1.1.0/24 proto bird metric 32 
+	nexthop via 10.1.6.1 dev ve2 weight 1 
+	nexthop via 10.1.7.2 dev ve1 weight 1 
+10.1.2.0/24 via 10.1.6.1 dev ve2 proto bird metric 32 
+10.1.3.0/24 dev ve0 proto kernel scope link src 10.1.3.1 
+10.1.3.0/24 dev ve0 proto bird scope link metric 32 
+10.1.4.0/24 via 10.1.7.2 dev ve1 proto bird metric 32 
+10.1.5.0/24 via 10.1.6.1 dev ve2 proto bird metric 32 
+10.1.6.0/24 dev ve2 proto kernel scope link src 10.1.6.2 
+10.1.6.0/24 dev ve2 proto bird scope link metric 32 
+10.1.7.0/24 dev ve1 proto kernel scope link src 10.1.7.1 
+10.1.7.0/24 dev ve1 proto bird scope link metric 32 
+10.1.8.0/24 via 10.1.7.2 dev ve1 proto bird metric 32 
+10.10.0.0/24 proto bird metric 32 
+	nexthop via 10.1.6.1 dev ve2 weight 1 
+	nexthop via 10.1.7.2 dev ve1 weight 1 
+10.10.1.0/24 proto bird metric 32 
+	nexthop via 10.1.6.1 dev ve2 weight 1 
+	nexthop via 10.1.7.2 dev ve1 weight 1 
+10.20.0.0/24 via 10.1.6.1 dev ve2 proto bird metric 32 
+10.20.1.0/24 via 10.1.6.1 dev ve2 proto bird metric 32 
+10.30.0.0/24 via 10.1.3.2 dev ve0 proto bird metric 32 
+10.30.1.0/24 via 10.1.3.2 dev ve0 proto bird metric 32 
+10.40.0.0/24 via 10.1.7.2 dev ve1 proto bird metric 32 
+10.40.1.0/24 via 10.1.7.2 dev ve1 proto bird metric 32 
+10.50.0.0/24 via 10.1.7.2 dev ve1 proto bird metric 32 
+10.50.1.0/24 via 10.1.7.2 dev ve1 proto bird metric 32

@@ -1,0 +1,206 @@
+#!/bin/bash
+       
+UNAME=$(uname)
+UNAME=${UNAME,,}
+
+declare -a INTERFACES
+declare -A IFBYMAC
+
+function D() {
+  echo DBG: "$@" 1>&2
+}
+
+function ifup() {
+  D ifup "$@"
+  case $UNAME in
+    linux)
+      ip link set $1 up
+      ;;
+    netbsd|openbsd|freebsd)
+      ifconfig $1 up
+      ;;
+  esac
+}
+
+function ip4() {
+  D ip4 "$@"
+  case $UNAME in
+    linux)
+      ip addr add $2 dev $1
+      ;;
+    netbsd|openbsd|freebsd)
+      ifconfig $1 inet $2
+      ;;
+  esac
+}
+
+function ip6() {
+  D ip6 "$@"
+  case $UNAME in
+    linux)
+      ip -6 addr add $2 dev $1
+      ;;
+    netbsd|openbsd|freebsd)
+      ifconfig $1 inet6 $2
+      ;;
+  esac
+}
+
+function ip4ptp() {
+  D ip4ptp "$@"
+  case $UNAME in
+    linux)
+      ip addr add $2 peer $3 dev $1
+      ;;
+    netbsd|openbsd|freebsd)
+      ifconfig $1 inet $2 ${3%%/*}
+      ;;
+  esac
+}
+
+function cnt() {
+  D cnt "$@"
+  local OUT
+  if [ ! -r /tmp/${1}count ]; then
+    OUT=16
+  else
+    OUT=$(</tmp/${1}count)
+  fi
+  echo $((OUT+1)) > /tmp/${1}count
+  echo $OUT
+}
+
+function grecount() {
+  cnt gre
+}
+
+function locount() {
+  cnt lo
+}
+
+function gre() {
+  D gre "$@"
+  case $UNAME in
+		linux)
+			ip tunnel add $1 mode gre remote $3 local $2
+			ip link set $1 up
+      echo $1
+      INTERFACES+=( $1, )
+      ;;
+    freebsd)
+      GIF=gre$(grecount)
+			ifconfig $GIF create
+			ifconfig $GIF tunnel $2 $3
+			ifconfig $GIF name $1 >/dev/null
+      echo $1
+      INTERFACES+=( $1, )
+      ;;
+    openbsd)
+      GIF=gre$(grecount)
+			ifconfig $GIF create
+			ifconfig $GIF tunnel $2 $3
+			ifconfig $GIF inet6 eui64	# OpenBSD needs to explicitly add link-local address for IPv6
+      ifconfig $GIF description $1
+      echo $GIF
+      INTERFACES+=( $GIF, )
+      ;;
+    netbsd)
+      GIF=gre$(grecount)
+			ifconfig $GIF create
+			ifconfig $GIF tunnel $2 $3
+      echo $GIF
+      INTERFACES+=( $GIF, )
+      ;;
+  esac
+}
+
+function dummy() {
+  D dummy "$@"
+  case $UNAME in
+    linux)
+      ip link add $1 type dummy
+      ip link set $1 up
+      echo $1
+      INTERFACES+=( $1, )
+      ;;
+    netbsd)
+      LIF=lo$(locount)
+      ifconfig $LIF create
+      ifconfig $LIF inet6 fe80::1/64
+      echo $LIF
+      INTERFACES+=( $LIF, )
+      ;;
+    openbsd)
+      LIF=lo$(locount)
+      ifconfig $LIF create
+      ifconfig $LIF inet6 fe80::1/64
+      ifconfig $LIF description $1
+      echo $LIF
+      INTERFACES+=( $LIF, )
+      ;;
+    freebsd)
+      LIF=lo$(locount)
+      ifconfig $LIF create
+      ifconfig $LIF inet6 fe80::1/64
+      ifconfig $LIF name $1 >/dev/null
+      echo $1
+      INTERFACES+=( $1, )
+      ;;
+  esac
+}
+
+function ifname() {
+  D ifname "$@"
+  case $UNAME in
+    linux)
+      ip link set $1 name $2
+      echo $2
+
+      ;;
+    freebsd)
+      ifconfig $1 name $2 >/dev/null
+      echo $2
+      ;;
+    openbsd)
+      ifconfig $1 description $2
+      echo $1
+      ;;
+    netbsd)
+      echo $1
+      ;;
+  esac
+}
+
+function ifnameset() {
+  D ifnameset "$@"
+  OLD=${IFBYMAC[$1]}
+  if [ "x$OLD" = "x$2" ]; then D "no change"; return; fi
+
+  IFBYMAC[$1]=$2
+  local -a NI
+  for I in ${INTERFACES[@]}; do
+    if [ "$I" = "$OLD,$1" ]; then
+      NI+=( $2,$1 )
+    else
+      NI+=( $I )
+    fi
+  done
+
+  INTERFACES=( ${NI[@]} )
+
+  D "interface list after change: ${INTERFACES[@]}"
+}
+
+# Get list of physical interfaces, together with their MACs.
+function ifaces() {
+  D ifaces
+  case $UNAME in
+    linux)
+      ( ip link ; echo "0: eof" ) | sed -rn '/^[0-9]/{s/^[0-9]+: //;s/:.*//;x;s/\n /,/;p;}; /ether/{s/.*ether (..:..:..:..:..:..).*/ \1/;H;}' | grep ','
+      ;;
+    *)
+      ( ifconfig ; echo "eof" ) | sed -rn '/^[a-z]/{s/:.*//;x;s/\n /,/;p;}; /(ether|lladdr|address:)/{s/.*(ether|lladdr|address:) (..:..:..:..:..:..).*/ \2/;H;}' | grep ','
+      ;;
+  esac
+}
+

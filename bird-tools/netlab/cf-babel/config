@@ -1,0 +1,16 @@
+
+NETLAB_NODES="m1 m2 m3 m4"
+
+netlab_init
+
+if_dummy m1 ve0 192.168.1 2001:db8:01:1
+if_dummy m2 ve0 192.168.2 2001:db8:02:1
+if_dummy m3 ve0 192.168.3 2001:db8:03:1
+if_dummy m4 ve0 192.168.4 2001:db8:04:1
+
+if_veth m1 ve1 m2 ve2 192.168.11
+if_veth m2 ve1 m3 ve2 192.168.12
+if_veth m3 ve1 m4 ve2 192.168.13
+if_veth m4 ve1 m1 ve2 192.168.14
+
+netlab_start

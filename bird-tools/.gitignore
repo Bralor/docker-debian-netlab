@@ -1,0 +1,15 @@
+netns-bin/netns_new
+netns-bin/netns_run
+
+/netlab/cfg/*.conf
+
+/netlab/*.pid
+/netlab/m*
+
+netlab/bird6/bird*
+netlab/bird4/bird*
+
+netlab-int/cf-ospf/__pycache__
+netlab-int/tests/__pycache__
+
+netlab-int/.NOTES.md

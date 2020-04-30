@@ -1,0 +1,12 @@
+#!/bin/bash
+. $(dirname $(readlink -f $0))/virt-lib
+
+NAME=$1
+
+if [ -z "$NAME" ]; then
+	echo -e "Usage: $0 name [custom options for qemu]\n    or $0 -m list of names"
+	exit 2
+fi
+
+vctl stop "$@"
+vctl start "$@"

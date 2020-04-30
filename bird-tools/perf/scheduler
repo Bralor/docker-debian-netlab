@@ -1,0 +1,92 @@
+#!/usr/bin/perl
+
+use common::sense;
+use Data::Dump;
+use Try::Tiny;
+use lib '.';
+use Git::PurePerl;
+use BirdTest;
+
+BEGIN {
+  if ($ARGV[0] eq "cleanup") {
+    say "Perd environment init skipped.";
+  } else {
+    say "Perf environment init started.";
+    my $name = "birdperf";
+
+    my $nproc = `grep processor /proc/cpuinfo | wc -l`;
+    my $birdproc = ($nproc - 1);
+    my $otherproc = "0-" . ($nproc - 2);
+    system("mkdir /dev/cpuset") and die;
+    system("mount -t cpuset cpuset /dev/cpuset") and die;
+    system("mkdir /dev/cpuset/birdperf") and die;
+    system("mkdir /dev/cpuset/other") and die;
+    system("echo $birdproc > /dev/cpuset/birdperf/cpuset.cpus") and die;
+    system("echo $otherproc > /dev/cpuset/other/cpuset.cpus") and die;
+    system("echo 0 > /dev/cpuset/birdperf/cpuset.mems") and die;
+    system("echo 0 > /dev/cpuset/other/cpuset.mems") and die;
+
+    # Move all tasks to the 'other' cpuset
+    my $cnt = 0;
+    open Q, "<", "/dev/cpuset/tasks" or die $!;
+    while (<Q>) {
+      open T, ">", "/dev/cpuset/other/tasks" or die $!;
+      print T $_;
+      close T;
+    }
+    close Q;
+
+    system("ip netns add birdperf");
+    system("ip netns exec birdperf ip link add bp type dummy");
+    system("ip netns exec birdperf ip link set bp up");
+    system("ip netns exec birdperf ip a add 10.0.0.1/16 dev bp");
+    say "Perf environment init done.";
+  }
+}
+
+END {
+  say "Perf environment cleanup started.";
+
+  while (1) {
+    my $cnt = 0;
+    open Q, "<", "/dev/cpuset/other/tasks" or (warn $!) and last;
+    while (<Q>) {
+      open T, ">", "/dev/cpuset/tasks" or warn $!;
+      print T $_;
+      close T;
+      $cnt++;
+    }
+    close Q;
+    last unless $cnt;
+  }
+
+  system("ps axu | join -2 2 -1 1 /dev/cpuset/birdperf/tasks -");
+
+  while (1) {
+    open Q, "<", "/dev/cpuset/birdperf/tasks" or (warn $!) and last;
+    while (<Q>) {
+      open T, ">", "/dev/cpuset/tasks" or warn $!;
+      print T $_;
+      close T;
+    }
+    close Q;
+    last;
+  }
+
+  system("rmdir /dev/cpuset/birdperf");
+  system("rmdir /dev/cpuset/other");
+  system("umount /dev/cpuset");
+  system("rmdir /dev/cpuset");
+
+  system("ip netns exec birdperf ip link del bp");
+  system("ip netns del birdperf");
+
+  say "Perf environment cleanup done."
+}
+
+$SIG{INT} = sub { say "Exiting on sigint: $!"; die; };
+$| = 1;
+
+exit 0 if ($ARGV[0] eq "cleanup");
+my $bt = BirdTest->new();
+$bt->loop();
