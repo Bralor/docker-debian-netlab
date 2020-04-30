@@ -1,3 +1,0 @@
-[submodule "perf/violin"]
-	path = perf/violin
-	url = git://trezor.joja.cz/violin.git

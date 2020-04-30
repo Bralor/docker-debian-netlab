@@ -1,4 +1,0 @@
-
-if [ -S bird.ctl ]
-then ./birdc -l down
-fi
