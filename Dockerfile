@@ -1,7 +1,5 @@
 FROM debian:stretch-slim
-COPY bird /home/bird
-COPY bird-tools /home/bird-tools
-WORKDIR /home/bird
+WORKDIR /home/
 RUN apt-get -y update
 RUN apt-get -y upgrade
 RUN apt-get -y install \
@@ -13,4 +11,12 @@ RUN apt-get -y install \
     libreadline-dev \
     git \
     iproute2
-CMD ["ls", "-la"]
+RUN git clone https://gitlab.labs.nic.cz/labs/bird
+WORKDIR /home/bird
+RUN autoreconf
+RUN ./configure
+RUN make
+RUN cd /home && git clone https://gitlab.labs.nic.cz/labs/bird-tools
+RUN cp bird /home/bird-tools/netlab/common && cp birdc /home/bird-tools/netlab/common
+WORKDIR /home/bird-tools/netlab
+CMD ["./start", "-c", "cf-ospf-base"]
